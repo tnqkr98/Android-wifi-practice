@@ -12,7 +12,12 @@ import android.os.Bundle
 import android.os.IBinder
 import android.provider.Settings
 import android.util.Log
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.Button
+import okhttp3.OkHttpClient
+import java.net.Socket
+import java.net.URL
 
 // android 8.0 - 8.1 : getScanResults 에 ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION, CHANGE_WIFI_STATE 중 하나의 권한 필요
 // android 9.0 : startScan() 을 위해선 ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION 중 하나, CHANGE_WIFI_STATE 필요
@@ -49,56 +54,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    val suggestionReceiver = object : BroadcastReceiver(){
-        override fun onReceive(context: Context?, intent: Intent?) {
-            Log.d("cupix network","wifi suggestion receive")
-            if(!intent?.action.equals(WifiManager.ACTION_WIFI_NETWORK_SUGGESTION_POST_CONNECTION)){
-                return
-            }
-            //connectWifi()
-        }
-    }
-
-    val networkCallback = object : ConnectivityManager.NetworkCallback() {
-        override fun onAvailable(network: Network) {
-            super.onAvailable(network)
-            Log.d("cupix network", "onAvailable $network")
-            val success = connectivityManager.bindProcessToNetwork(network)
-            Log.d("cupix network","success : $success")
-        }
-
-        override fun onLosing(network: Network, maxMsToLive: Int) {
-            super.onLosing(network, maxMsToLive)
-            Log.d("cupix network", "onLosing")
-        }
-
-        override fun onLost(network: Network) {
-            super.onLost(network)
-            Log.d("cupix network", "onLost")
-            connectivityManager.unregisterNetworkCallback(this)
-        }
-
-        override fun onUnavailable() {
-            super.onUnavailable()
-            Log.d("cupix network", "onUnavailable")
-        }
-
-        override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
-            super.onCapabilitiesChanged(network, networkCapabilities)
-            //Log.d("cupix network", "onCapabilitiesChanged , network : $network, networkCapabilities : $networkCapabilities")
-        }
-
-        override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) {
-            super.onLinkPropertiesChanged(network, linkProperties)
-            //Log.d("cupix network", "onLinkPropertiesChanged network : $network, linkProperties : $linkProperties")
-        }
-
-        override fun onBlockedStatusChanged(network: Network, blocked: Boolean) {
-            super.onBlockedStatusChanged(network, blocked)
-            //Log.d("cupix network", "onBlockedStatusChanged")
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -112,12 +67,11 @@ class MainActivity : AppCompatActivity() {
             Manifest.permission.CHANGE_WIFI_STATE,
             Manifest.permission.ACCESS_COARSE_LOCATION),101)
 
-        wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        connectivityManager = applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        wifiManager = getSystemService(Context.WIFI_SERVICE) as WifiManager
+        connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val intentFilter = IntentFilter()
         intentFilter.addAction(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION)
-        //registerReceiver(wifiScanReceiver, intentFilter)
-        registerReceiver(suggestionReceiver,IntentFilter(WifiManager.ACTION_WIFI_NETWORK_SUGGESTION_POST_CONNECTION))
+        registerReceiver(wifiScanReceiver, intentFilter)
 
         val btn = findViewById<Button>(R.id.button)
         btn.setOnClickListener {
@@ -129,33 +83,55 @@ class MainActivity : AppCompatActivity() {
         // Suggestion api 29 이상 부터
         btn2.setOnClickListener {
 
-            // ONE R XUFKFW.OSC, BSSID : c0:84:7d:f3:a3:e6, capabilities : [WPA2-PSK-CCMP][RSN-PSK-CCMP][ESS][WPS]
+            // ONE R XUFKFW.OSC, BSSID : c0:84:7d:f3:a3:e6, capabilities : [WPA2-PSK-CCMP][RSN-PSK-CCMP][ESS][WPS], 88888888
             // 제안(사용자 승인) -> 연결 ?
             val suggestion2 = WifiNetworkSuggestion.Builder()
-                //.setSsid("ONE R XUFKFW.OSC")
-                //.setWpa2Passphrase("88888888")
+                .setSsid("THETAYN12100323.OSC")
+                .setWpa2Passphrase("12100323")
                 .setIsAppInteractionRequired(true)
-                .setSsid("Cupix")
-                .setWpa2Passphrase("ScanRoom3D")
                 .build()
 
             val suggestionList = listOf(suggestion2)
 
             wifiManager.removeNetworkSuggestions(suggestionList)
 
+            //connectWifi()
+
+            val suggestionReceiver = object : BroadcastReceiver(){
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    Log.d("cupix network","wifi suggestion receive")
+                    if(!intent?.action.equals(WifiManager.ACTION_WIFI_NETWORK_SUGGESTION_POST_CONNECTION)){
+                        return
+                    }
+                    //connectWifi()
+                }
+            }
+            registerReceiver(suggestionReceiver,IntentFilter(WifiManager.ACTION_WIFI_NETWORK_SUGGESTION_POST_CONNECTION))
+
+
             val status = wifiManager.addNetworkSuggestions(suggestionList)
             if(status != WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS){
                 //error
                 Log.d("cupix network","wifi suggestion error")
             }
-            Log.d("cupix network","$status")
-            //connectWifi()
+            Log.d("cupix network","suggestion : success")
         }
 
 
         val btn3 = findViewById<Button>(R.id.button3)
         btn3.setOnClickListener {
             connectWifi()
+        }
+
+        val webView = findViewById<WebView>(R.id.web_view)
+        webView.webViewClient = WebViewClient()
+        val setting = webView.settings
+        setting.javaScriptEnabled = true
+        webView.loadUrl("https://naver.com")
+
+        val btn4 = findViewById<Button>(R.id.button4)
+        btn4.setOnClickListener {
+            webView.loadUrl("https://naver.com")
         }
     }
 
@@ -183,33 +159,73 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        connectivityManager.unregisterNetworkCallback(networkCallback)
     }
 
-    fun connectWifi(){
+    private fun connectWifi(){
         Log.d("cupix network","${wifiManager.wifiState}")
         Log.d("cupix network","${wifiManager.isWifiEnabled}")
 
         val specifier = WifiNetworkSpecifier.Builder()
-            //.setSsid("ONE R XUFKFW.OSC")
+            .setSsid("THETAYN12100323.OSC")
             //.setBssid(MacAddress.fromString("C0:84:7D:F3:A3:E6"))
-            //.setWpa2Passphrase("88888888")
-            .setSsid("Cupix")
-            .setBssid(MacAddress.fromString("5a:86:94:40:5e:94"))
-            .setWpa2Passphrase("ScanRoom3D")
+            .setWpa2Passphrase("12100323")
+            //.setSsid("Cupix")
+            //.setBssid(MacAddress.fromString("5a:86:94:40:5e:94"))
+            //.setWpa2Passphrase("ScanRoom3D")
             .build()
 
 
         // [WPA2-PSK-CCMP][RSN-PSK-CCMP][ESS][WPS]
-        val request = NetworkRequest.Builder()
+        val wifiRequest = NetworkRequest.Builder()
             .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
             .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            //.addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
-            //.addCapability(NetworkCapabilities.NET_CAPABILITY_TRUSTED)
-            //.addCapability(NetworkCapabilities.NET_CAPABILITY_)
             .setNetworkSpecifier(specifier)
             .build()
 
-        connectivityManager.requestNetwork(request,networkCallback)
+        connectivityManager.requestNetwork(wifiRequest,object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                super.onAvailable(network)
+                Log.d("wifi network", "onAvailable $network")
+                //var netInfo = connectivityManager.activeNetwork
+
+                //var client = OkHttpClient()
+
+                //val success = connectivityManager.bindProcessToNetwork(network)
+                //network.bindSocket(Socket("http://192.168.1.1",80))
+                //Log.d("cupix network","success : $success")
+                //network.openConnection(URL("http://192.168.1.1:80"))
+            }
+
+            override fun onLosing(network: Network, maxMsToLive: Int) {
+                super.onLosing(network, maxMsToLive)
+                //Log.d("wifi network", "onLosing")
+            }
+
+            override fun onLost(network: Network) {
+                super.onLost(network)
+                Log.d("wifi network", "onLost")
+                connectivityManager.unregisterNetworkCallback(this)
+            }
+
+            override fun onUnavailable() {
+                super.onUnavailable()
+                //Log.d("wifi network", "onUnavailable")
+            }
+
+            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+                super.onCapabilitiesChanged(network, networkCapabilities)
+                //Log.d("wifi network", "onCapabilitiesChanged , network : $network, networkCapabilities : $networkCapabilities")
+            }
+
+            override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) {
+                super.onLinkPropertiesChanged(network, linkProperties)
+                //Log.d("wifi network", "onLinkPropertiesChanged network : $network, linkProperties : $linkProperties")
+            }
+
+            override fun onBlockedStatusChanged(network: Network, blocked: Boolean) {
+                super.onBlockedStatusChanged(network, blocked)
+                //Log.d("wifi network", "onBlockedStatusChanged")
+            }
+        })
     }
 }
